@@ -73,6 +73,7 @@ import software.aws.toolkits.jetbrains.services.codewhisperer.util.CrossFileStra
 import software.aws.toolkits.jetbrains.services.codewhisperer.util.FileContextProvider
 import software.aws.toolkits.jetbrains.services.codewhisperer.util.UtgStrategy
 import software.aws.toolkits.jetbrains.utils.isInjectedText
+import org.slf4j.LoggerFactory
 import software.aws.toolkits.resources.message
 import software.aws.toolkits.telemetry.CodewhispererCompletionType
 import software.aws.toolkits.telemetry.CodewhispererSuggestionState
@@ -114,7 +115,6 @@ class CodeWhispererService {
             CodeWhispererTelemetryService.getInstance().sendFailedServiceInvocationEvent(project, e::class.simpleName)
             return
         }
-
         val language = requestContext.fileContextInfo.programmingLanguage
         if (!language.isCodeCompletionSupported()) {
             LOG.debug { "Programming language $language is not supported by CodeWhisperer" }
@@ -621,17 +621,26 @@ class CodeWhispererService {
         val recommendationLogs = recommendations.map { it.content().trimEnd() }
             .reduceIndexedOrNull { index, acc, recommendation -> "$acc\n[${index + 1}]\n$recommendation" }
         LOG.info {
-            "SessionId: ${responseContext.sessionId}, " +
-                "RequestId: $requestId, " +
-                "Jetbrains IDE: ${ApplicationInfo.getInstance().fullApplicationName}, " +
-                "IDE version: ${ApplicationInfo.getInstance().apiVersion}, " +
-                "Filename: ${requestContext.fileContextInfo.filename}, " +
-                "Left context of current line: ${requestContext.fileContextInfo.caretContext.leftContextOnCurrentLine}, " +
-                "Cursor line: ${requestContext.caretPosition.line}, " +
-                "Caret offset: ${requestContext.caretPosition.offset}, " +
-                (latency?.let { "Latency: $latency, " } ?: "") +
-                (exceptionType?.let { "Exception Type: $it, " } ?: "") +
-                "Recommendations: \n${recommendationLogs ?: "None"}"
+            "SessionId: ${responseContext.sessionId}, \n" +
+                "RequestId: $requestId, \n" +
+                "Jetbrains IDE: ${ApplicationInfo.getInstance().fullApplicationName}, \n" +
+                "IDE version: ${ApplicationInfo.getInstance().apiVersion}, \n" +
+                "Filename: ${requestContext.fileContextInfo.filename}, \n" +
+                "Left context of current line: ${requestContext.fileContextInfo.caretContext.leftContextOnCurrentLine}, \n" +
+                "Cursor line: ${requestContext.caretPosition.line}, \n" +
+                "Caret offset: ${requestContext.caretPosition.offset}, \n" +
+                (latency?.let { "Latency: $latency, \n" } ?: "") +
+                (exceptionType?.let { "Exception Type: $it, \n" } ?: "") +
+                "Recommendations: ${recommendationLogs ?: "None"},\n"
+        }
+        CUSTOM_LOG.info {
+            "AUTOMATION_PROMPTS: {\n" +
+                "RequestId: $requestId, \n" +
+                "Filename: ${requestContext.fileContextInfo.filename}, \n" +
+                "Programming_Language: ${requestContext.fileContextInfo.programmingLanguage}, \n" +
+                "Left_Context: ${requestContext.fileContextInfo.caretContext.leftFileContext}, \n" +
+                "Right_Context: ${requestContext.fileContextInfo.caretContext.rightFileContext}, \n" +
+            "}\n"
         }
     }
 
@@ -669,6 +678,7 @@ class CodeWhispererService {
 
     companion object {
         private val LOG = getLogger<CodeWhispererService>()
+        private val CUSTOM_LOG = LoggerFactory.getLogger("prompts")
         val CODEWHISPERER_CODE_COMPLETION_PERFORMED: Topic<CodeWhispererCodeCompletionServiceListener> = Topic.create(
             "CodeWhisperer code completion service invoked",
             CodeWhispererCodeCompletionServiceListener::class.java
